@@ -1,5 +1,6 @@
 package com.wisely.web;
 
+import com.fasterxml.jackson.databind.util.ArrayIterator;
 import com.wisely.dao.PersonRepository;
 import com.wisely.dao.TmallOrderDao;
 import com.wisely.domain.Person;
@@ -18,6 +19,8 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @RestController
@@ -128,7 +131,7 @@ public class DataController {
 
     }
 
-    public static String filePath = "C:\\Users\\57580\\Desktop\\号码\\201801";
+    public static String filePath = "C:\\Users\\57580\\Desktop\\号码\\201802";
 
     @RequestMapping("/tmall")
     public String tmall() {
@@ -141,15 +144,16 @@ public class DataController {
     }
 
     public void readeCsv(String path, int ignoreRows) throws IOException {
+        ExecutorService pool = Executors.newFixedThreadPool(15);
         File dir = new File(path);
         File[] files = dir.listFiles();
         System.out.println("共有" + files.length + "个文件");
-        ArrayList<Object> objects = new ArrayList<>();
+        List<TmallOrder> objects = new ArrayList<TmallOrder>();
         for (File file : files) {
             BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file), Charset.forName
                     ("GBK")));
             String line = "";
-            bReader.readLine();
+            bReader.readLine();//不要标题
             while ((line = bReader.readLine()) != null) {
                 String[] split = line.split(",");
                 List<String> strings = Arrays.asList(split);
@@ -180,8 +184,22 @@ public class DataController {
                 tmallOrder.setReturnCode(strings.get(16));
                 tmallOrder.setCopeWith(strings.get(17));
                 //tmallOrder.setCallback(strings.get(18));
-                //objects.add(tmallOrder);
-                tmallOrderDao.save(tmallOrder);
+                objects.add(tmallOrder);
+                if (objects.size() == 250) {
+                    pool.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            TmallOrder[] tmalls = new TmallOrder[250];
+                            for (int i = 0; i < 250; i++) {
+                                tmalls[i] = objects.get(i);
+                            }
+                            // TmallOrder[] objects1 = (TmallOrder[]) objects.toArray();
+                            System.out.println(Thread.currentThread());
+                            tmallOrderDao.save(new ArrayIterator<TmallOrder>(tmalls));
+                        }
+                    });
+                    objects.clear();
+                }
             }
         }
     }
