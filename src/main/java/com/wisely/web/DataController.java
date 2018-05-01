@@ -6,7 +6,9 @@ import com.wisely.dao.TmallOrderDao;
 import com.wisely.domain.Person;
 import com.wisely.domain.TmallOrder;
 import org.apache.commons.lang.StringUtils;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cglib.beans.BeanCopier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -16,9 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.*;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -131,7 +131,7 @@ public class DataController {
 
     }
 
-    public static String filePath = "C:\\Users\\57580\\Desktop\\号码\\201802";
+    public static String filePath = "C:\\Users\\Breeze\\Desktop\\号码\\201802";
 
     @RequestMapping("/tmall")
     public String tmall() {
@@ -143,12 +143,14 @@ public class DataController {
         return "ok";
     }
 
+    ExecutorService pool = Executors.newFixedThreadPool(20);
+
     public void readeCsv(String path, int ignoreRows) throws IOException {
-        ExecutorService pool = Executors.newFixedThreadPool(15);
+
         File dir = new File(path);
         File[] files = dir.listFiles();
         System.out.println("共有" + files.length + "个文件");
-        List<TmallOrder> objects = new ArrayList<TmallOrder>();
+        List<TmallOrder> objects = new ArrayList<>();
         for (File file : files) {
             BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file), Charset.forName
                     ("GBK")));
@@ -159,7 +161,7 @@ public class DataController {
                 List<String> strings = Arrays.asList(split);
                 strings = strings.stream().filter(s -> StringUtils.isNotBlank(s)).collect(Collectors.toList());
                 int size1 = strings.size();
-                System.out.println("共有" + size1 + "列");
+//                System.out.println("共有" + size1 + "列");
                 if (size1 != 20) {
                     continue;
                 }
@@ -185,23 +187,39 @@ public class DataController {
                 tmallOrder.setCopeWith(strings.get(17));
                 //tmallOrder.setCallback(strings.get(18));
                 objects.add(tmallOrder);
-                if (objects.size() == 250) {
-                    pool.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            TmallOrder[] tmalls = new TmallOrder[250];
-                            for (int i = 0; i < 250; i++) {
-                                tmalls[i] = objects.get(i);
-                            }
-                            // TmallOrder[] objects1 = (TmallOrder[]) objects.toArray();
-                            System.out.println(Thread.currentThread());
-                            tmallOrderDao.save(new ArrayIterator<TmallOrder>(tmalls));
+                synchronized (objects) {
+                    if (objects.size() == 250) {
+                 /*       ArrayList<TmallOrder> objectTem = new ArrayList<>();
+                        for (int i = 0; i < 250; i++) {
+                            objectTem.add(null);
                         }
-                    });
-                    objects.clear();
+                        Collections.copy(objectTem, objects);*/
+                        System.out.println("objectTem的数量:" + objects.size());
+                        threadExec(objects, pool);
+                        // objects.clear();
+                        objects = new ArrayList<>();
+                    }
                 }
             }
+            System.out.println("程序完毕================================");
         }
+    }
+
+    private synchronized void threadExec(List<TmallOrder> orders, ExecutorService pool) {
+        pool.execute(new Runnable() {
+            @Override
+            public void run() {
+                final List<TmallOrder> ss = orders;
+                TmallOrder[] tmalls = new TmallOrder[250];
+                for (int i = 0; i < 250; i++) {
+                    tmalls[i] = ss.get(i);
+                }
+                // TmallOrder[] objects1 = (TmallOrder[]) objects.toArray();
+                System.out.println("当前线程为：" + Thread.currentThread());
+                tmallOrderDao.save(new ArrayIterator<TmallOrder>(tmalls));
+            }
+        });
+//        objects.clear();
     }
 
 }
